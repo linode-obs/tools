@@ -1,0 +1,10 @@
+vm_url: "https://my-vmselect.com/select/0/prometheus/api/v1/query"
+# ideally have common_name, OU, and serial number in your query
+vm_query: 'min by (common_name, organizational_unit, serial) (topk by (common_name, organizational_unit) (1, last_over_time(x509_cert_expiry{organizational_unit=~"service_ou"}[24h]) / (60 * 60 * 24)) < 29)'
+vault_pki_path: "pki"
+vm_timeout_secs: 10
+# optional ca_cert
+# ca_cert_path: "/path/to/ca_cert.pem"
+# not optional as my environment requires mTLS for VictoriaMetrics
+client_cert_path: "/path/to/crt.crt"
+client_key_path: "/path/to/key.key"
