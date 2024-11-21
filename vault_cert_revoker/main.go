@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds settings for VM and Vault
+// TODO - probably use optional for some of these fields
 type Config struct {
 	VMURL          string `yaml:"vm_url"`
 	VMQuery        string `yaml:"vm_query"`
@@ -29,14 +29,13 @@ type Config struct {
 	ClientKeyPath  string `yaml:"client_key_path"`
 }
 
-// Certificate represents a single certificate
+// Expect CN, OU, SN
 type Certificate struct {
 	CommonName         string
 	OrganizationalUnit string
 	SerialNumber       string
 }
 
-// LoadConfig reads configuration from a YAML file
 func LoadConfig(file string) (*Config, error) {
 	config := &Config{}
 	data, err := os.ReadFile(file)
@@ -48,6 +47,7 @@ func LoadConfig(file string) (*Config, error) {
 }
 
 // CreateTLSClient creates an HTTP client with mTLS configured
+// Make CA optional though
 func CreateTLSClient(config *Config) (*http.Client, error) {
 	var caCertPool *x509.CertPool
 
@@ -80,6 +80,7 @@ func CreateTLSClient(config *Config) (*http.Client, error) {
 }
 
 // QueryVictoriaMetrics queries VM with the provided PromQL query
+// Should probably work for Prometheus too
 func QueryVictoriaMetrics(config *Config) ([]Certificate, error) {
 	client, err := CreateTLSClient(config)
 	if err != nil {
@@ -90,8 +91,6 @@ func QueryVictoriaMetrics(config *Config) ([]Certificate, error) {
 	queryParams := url.Values{}
 	queryParams.Set("query", config.VMQuery)
 	queryURL := fmt.Sprintf("%s?%s", config.VMURL, queryParams.Encode())
-
-	// slog.Info("Querying VictoriaMetrics", "url", queryURL)
 
 	resp, err := client.Get(queryURL)
 	if err != nil {
@@ -133,6 +132,7 @@ func QueryVictoriaMetrics(config *Config) ([]Certificate, error) {
 }
 
 // FilterCertificates filters certificates by common_name using a regex
+// TODO - might be nice to filter OU too?
 func FilterCertificates(certs []Certificate, regex *regexp.Regexp) []Certificate {
 	var filtered []Certificate
 	for _, cert := range certs {
@@ -144,6 +144,8 @@ func FilterCertificates(certs []Certificate, regex *regexp.Regexp) []Certificate
 }
 
 // RevokeCertificate uses the Vault CLI to revoke a certificate
+// Note - can't revoke expired certs
+// https://github.com/hashicorp/vault/issues/19452
 func RevokeCertificate(config *Config, cert Certificate, dryRun bool) error {
 	vaultCommand := "vault"
 	args := []string{
@@ -172,7 +174,6 @@ func RevokeCertificate(config *Config, cert Certificate, dryRun bool) error {
 	return nil
 }
 
-// Confirm prompts the user for confirmation
 func Confirm(prompt string) bool {
 	fmt.Print(prompt + " [y/N]: ")
 	scanner := bufio.NewScanner(os.Stdin)
@@ -214,7 +215,6 @@ func main() {
 		return
 	}
 
-	// Apply the filter regex if provided
 	if *filterRegex != "" {
 		regex, err := regexp.Compile(*filterRegex)
 		if err != nil {
